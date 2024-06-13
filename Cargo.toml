@@ -1,0 +1,13 @@
+[package]
+name = "aeron_client"
+version = "0.1.0"
+edition = "2021"
+
+
+[lib]
+name = "lib"
+path = "src/lib.rs"
+
+
+[dependencies]
+aeron-rs = {git = "https://github.com/UnitedTraders/aeron-rs.git", branch = "master"}
