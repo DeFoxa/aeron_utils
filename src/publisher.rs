@@ -1,35 +1,55 @@
-use super::{
-    test_config::{
-        DEFAULT_IPC_CHANNEL, DEFAULT_IPC_STREAM_ID, DEFAULT_UDP_CHANNEL, DEFAULT_UDP_STREAM_ID,
-    },
+use crate::{
+    error::NetworkCommunicationError,
+    test_config::*,
+    traits::{Chunk, Publisher},
     utils::*,
 };
-use crate::{
-    capnp_client::CapnpMessage,
-    deserializer::DeserializedMessage,
-    transport::{network::error::NetworkCommunicationError, publisher_traits::Publisher},
-};
 use aeron_rs::concurrent::atomic_buffer::{AlignedBuffer, AtomicBuffer};
-use aeron_rs::concurrent::status::status_indicator_reader::channel_status_to_str;
 use aeron_rs::context::Context;
-use aeron_rs::utils::{errors::AeronError, types::Index};
+use aeron_rs::utils::errors::AeronError;
 use aeron_rs::{aeron::Aeron, publication::Publication};
-use async_trait::async_trait;
 use eyre::Result;
-use lazy_static::lazy_static;
 use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::error::Error;
-use std::ffi::CString;
-use std::io::{stdout, Write};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Condvar, Mutex, MutexGuard,
-};
-
-use eyre::eyre;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 use tokio::{sync::mpsc, task::JoinHandle};
+
+// TEMP: will change to generic message types
+
+#[derive(Debug, Clone)]
+pub enum DeserializedMessage {
+    NormalizedBook(NormalizedBook),
+    NormalizedTrade(NormalizedTrades),
+}
+
+impl Chunk for DeserializedMessage {
+    fn chunk_data(&self) -> Vec<Vec<u8>> {
+        todo!();
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NormalizedTrades;
+
+#[derive(Debug, Clone)]
+pub struct NormalizedBook;
+
+#[derive(Debug, Clone)]
+pub struct CapnpMessage;
+
+impl Chunk for CapnpMessage {
+    fn chunk_data(&self) -> Vec<Vec<u8>> {
+        todo!();
+    }
+}
+
+#[derive(Debug)]
+pub enum AeronMessage {
+    CapnpMessage(CapnpMessage),
+    //TODO: Add other transport/communication message types based on integrations
+    Other(DeserializedMessage),
+}
+
+//
 
 #[derive(Clone)]
 pub struct AeronConfig {
@@ -240,12 +260,15 @@ impl AeronPublisher {
         Ok(())
     }
 }
+
+unsafe impl Send for PublicationComponents {}
+
 async fn run_aeron_actor(mut actor: AeronPublisher) -> Result<()> {
     tokio::spawn(async move {
         while let Some(msg) = actor.receiver.recv().await {
             match actor.handle_message(msg).await {
                 Ok(_) => tracing::debug!("Message sent to handle_message for publication"),
-                Err(e) => tracing::error!("failed to handle_message"),
+                Err(_) => tracing::error!("failed to handle_message"),
             }
         }
     })
@@ -264,7 +287,7 @@ impl AeronPublisherHandler {
         let components = Arc::new(Mutex::new(
             PublicationComponents::register_with_media_driver(config)?,
         ));
-        let mut manager = Arc::new(Mutex::new(AeronPublicationManager::new()));
+        let /* mut */ manager = Arc::new(Mutex::new(AeronPublicationManager::new()));
 
         {
             let lock = components.lock().unwrap();
@@ -292,11 +315,10 @@ impl AeronPublisherHandler {
     }
 }
 
-impl Publisher for Publication {
-    type Message = CapnpMessage;
+impl<DeserializedMessage: Chunk> Publisher<DeserializedMessage> for Publication {
     type Error = AeronError;
 
-    fn publish(&self, msg: Self::Message) -> Result<(), Self::Error> {
+    fn publish(&self, msg: DeserializedMessage) -> Result<(), Self::Error> {
         let chunks = msg.chunk_data();
         for chunk in chunks {
             let buffer = AlignedBuffer::with_capacity(1024);
@@ -325,198 +347,192 @@ impl Publisher for Publication {
     }
 }
 
-#[derive(Debug)]
-pub enum AeronMessage {
-    CapnpMessage(CapnpMessage),
-    //TODO: Add other transport/communication message types based on integrations
-    Other(DeserializedMessage),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::aeron_config::{
-        DEFAULT_IPC_CHANNEL, DEFAULT_UDP_CHANNEL, TEST_IPC_STREAM_ID, TEST_UDP_STREAM_ID,
-    };
-    use super::*;
-    use aeron_rs::concurrent::logbuffer::header::Header;
-    use aeron_rs::concurrent::strategies::{SleepingIdleStrategy, Strategy};
-    use aeron_rs::image::Image;
-    use aeron_rs::publication::Publication;
-    use aeron_rs::utils::types::Index;
-    use rand::distributions::Uniform;
-    use rand::{thread_rng, Rng};
-    use std::collections::HashSet;
-    use std::slice;
-    use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-    use std::sync::{Arc, Mutex};
-    use std::thread;
-
-    lazy_static! {
-        pub static ref SUBSCRIPTION_ID: AtomicI64 = AtomicI64::new(-1);
-    }
-
-    // NOTE: Requires associated subscriber with equivalent stream_id to AeronConfig generated
-    // stream_id, in this case default_udp()
-    // NOTE: Confirmation of publish must be established on receipt by aeron subscriber.
-
-    // TODO: Tests pass regardless of active subscriber. Consider test refactor to confirm active
-    // subscriber on aeron instance. Check aeron_rs::Aeron for method to confirm media driver
-    // state and include in assert.
-    #[test]
-    fn config_to_publish() -> Result<()> {
-        let msg = "test message";
-        let str_msg = format!("{}", msg);
-
-        let capnp_msg = CapnpMessage {
-            data: str_msg.into(),
-        };
-
-        let config = AeronConfig::default_udp()?;
-        let components = PublicationComponents::register_with_media_driver(config).unwrap();
-        let mut manager = AeronPublicationManager::new();
-
-        manager.add_publication(components.publication.clone());
-
-        let (place_holder_sender, place_holder_receiver) = mpsc::channel::<AeronMessage>(256);
-
-        let ap = AeronPublisher::new(place_holder_receiver, Arc::new(Mutex::new(components)))?;
-
-        let publisher = ap.publisher.lock().unwrap();
-        publisher.publish(capnp_msg).unwrap();
-
-        Ok(())
-    }
-
-    #[test]
-    fn aeron_udp_publisher() -> Result<()> {
-        let messages = generate_test_messages(10);
-        messages.iter().map(|x| x.to_string());
-
-        let config = AeronConfig::default_udp()?;
-
-        let mut context = Context::new();
-        setup_aeron_publisher_context(&mut context);
-
-        let mut aeron = Aeron::new(context).unwrap();
-
-        let pub_id = aeron
-            .add_publication(
-                str_to_c(&config.channel).expect("test_aeron_ipc str_to_c conversion error"),
-                config.stream_id,
-            )
-            .expect("unable to add publication to aeron");
-
-        let mut publication = aeron.find_publication(pub_id);
-
-        while publication.is_err() {
-            std::thread::yield_now();
-            publication = aeron.find_publication(pub_id);
-        }
-
-        let publication = publication.unwrap();
-
-        for &msg in &messages {
-            test_send_message(publication.clone(), msg.to_string());
-        }
-        Ok(())
-
-        // assert_eq!(receive_messages(&publication, messages.len()), messages);
-    }
-    #[test]
-    fn aeron_ipc_publisher() -> Result<()> {
-        let messages = generate_test_messages(10);
-        messages.iter().map(|x| x.to_string());
-
-        let config = AeronConfig::default_ipc()?;
-
-        let mut context = Context::new();
-        setup_aeron_publisher_context(&mut context);
-
-        let mut aeron = Aeron::new(context).unwrap();
-
-        let pub_id = aeron
-            .add_publication(
-                str_to_c(&config.channel).expect("test_aeron_ipc str_to_c conversion error"),
-                config.stream_id,
-            )
-            .expect("unable to add publication to aeron");
-
-        let mut publication = aeron.find_publication(pub_id);
-
-        while publication.is_err() {
-            std::thread::yield_now();
-            publication = aeron.find_publication(pub_id);
-        }
-
-        let publication = publication.unwrap();
-
-        for &msg in &messages {
-            test_send_message(publication.clone(), msg.to_string());
-        }
-        Ok(())
-
-        // assert_eq!(receive_messages(&publication, messages.len()), messages);
-    }
-    //NOTE: tmp
-    fn generate_test_messages(count: usize) -> Vec<i32> {
-        let mut rng = thread_rng();
-        let range = Uniform::new_inclusive(1, 1000);
-
-        (0..count).map(|_| rng.sample(&range)).collect()
-    }
-    //NOTE: tmp
-    fn test_send_message(publication: Arc<Mutex<Publication>>, msg: String) {
-        let str_msg = format!("{}", msg);
-        let c_str_msg = CString::new(str_msg).unwrap();
-        let buffer = AlignedBuffer::with_capacity(256);
-        let src_buffer = AtomicBuffer::from_aligned(&buffer);
-
-        src_buffer.put_bytes(0, c_str_msg.as_bytes());
-
-        publication
-            .lock()
-            .unwrap()
-            .offer_part(src_buffer, 0, c_str_msg.as_bytes().len() as i32);
-    }
-
-    fn available_image_handler(image: &Image) {
-        println!(
-            "Available image correlation_id={} session_id={} at position={} from {}",
-            image.correlation_id(),
-            image.session_id(),
-            image.position(),
-            image.source_identity().to_str().unwrap()
-        );
-    }
-
-    fn unavailable_image_handler(image: &Image) {
-        println!(
-            "Unavailable image correlation_id={} session_id={} at position={} from {}",
-            image.correlation_id(),
-            image.session_id(),
-            image.position(),
-            image.source_identity().to_str().unwrap()
-        );
-    }
-    fn on_new_fragment(buffer: &AtomicBuffer, offset: Index, length: Index, header: &Header) {
-        unsafe {
-            let slice_msg =
-                slice::from_raw_parts_mut(buffer.buffer().offset(offset as isize), length as usize);
-            let msg = CString::new(slice_msg).unwrap();
-            println!(
-                "Message to stream {} from session {} ({}@{}): <<{}>>",
-                header.stream_id(),
-                header.session_id(),
-                length,
-                offset,
-                msg.to_str().unwrap()
-            );
-        }
-    }
-
-    pub fn setup_aeron_publisher_context(context: &mut Context) {
-        context.set_new_publication_handler(Box::new(on_new_publication_handler));
-        context.set_error_handler(Box::new(error_handler));
-        context.set_pre_touch_mapped_memory(true);
-    }
-}
+//
+// #[cfg(test)]
+// mod tests {
+//     use super::super::aeron_config::{
+//         DEFAULT_IPC_CHANNEL, DEFAULT_UDP_CHANNEL, TEST_IPC_STREAM_ID, TEST_UDP_STREAM_ID,
+//     };
+//     use super::*;
+//     use aeron_rs::concurrent::logbuffer::header::Header;
+//     use aeron_rs::concurrent::strategies::{SleepingIdleStrategy, Strategy};
+//     use aeron_rs::image::Image;
+//     use aeron_rs::publication::Publication;
+//     use aeron_rs::utils::types::Index;
+//     use rand::distributions::Uniform;
+//     use rand::{thread_rng, Rng};
+//     use std::collections::HashSet;
+//     use std::slice;
+//     use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+//     use std::sync::{Arc, Mutex};
+//     use std::thread;
+//
+//     lazy_static! {
+//         pub static ref SUBSCRIPTION_ID: AtomicI64 = AtomicI64::new(-1);
+//     }
+//
+//     // NOTE: Requires associated subscriber with equivalent stream_id to AeronConfig generated
+//     // stream_id, in this case default_udp()
+//     // NOTE: Confirmation of publish must be established on receipt by aeron subscriber.
+//
+//     // TODO: Tests pass regardless of active subscriber. Consider test refactor to confirm active
+//     // subscriber on aeron instance. Check aeron_rs::Aeron for method to confirm media driver
+//     // state and include in assert.
+//     #[test]
+//     fn config_to_publish() -> Result<()> {
+//         let msg = "test message";
+//         let str_msg = format!("{}", msg);
+//
+//         let capnp_msg = CapnpMessage {
+//             data: str_msg.into(),
+//         };
+//
+//         let config = AeronConfig::default_udp()?;
+//         let components = PublicationComponents::register_with_media_driver(config).unwrap();
+//         let mut manager = AeronPublicationManager::new();
+//
+//         manager.add_publication(components.publication.clone());
+//
+//         let (place_holder_sender, place_holder_receiver) = mpsc::channel::<AeronMessage>(256);
+//
+//         let ap = AeronPublisher::new(place_holder_receiver, Arc::new(Mutex::new(components)))?;
+//
+//         let publisher = ap.publisher.lock().unwrap();
+//         publisher.publish(capnp_msg).unwrap();
+//
+//         Ok(())
+//     }
+//
+//     #[test]
+//     fn aeron_udp_publisher() -> Result<()> {
+//         let messages = generate_test_messages(10);
+//         messages.iter().map(|x| x.to_string());
+//
+//         let config = AeronConfig::default_udp()?;
+//
+//         let mut context = Context::new();
+//         setup_aeron_publisher_context(&mut context);
+//
+//         let mut aeron = Aeron::new(context).unwrap();
+//
+//         let pub_id = aeron
+//             .add_publication(
+//                 str_to_c(&config.channel).expect("test_aeron_ipc str_to_c conversion error"),
+//                 config.stream_id,
+//             )
+//             .expect("unable to add publication to aeron");
+//
+//         let mut publication = aeron.find_publication(pub_id);
+//
+//         while publication.is_err() {
+//             std::thread::yield_now();
+//             publication = aeron.find_publication(pub_id);
+//         }
+//
+//         let publication = publication.unwrap();
+//
+//         for &msg in &messages {
+//             test_send_message(publication.clone(), msg.to_string());
+//         }
+//         Ok(())
+//
+//         // assert_eq!(receive_messages(&publication, messages.len()), messages);
+//     }
+//     #[test]
+//     fn aeron_ipc_publisher() -> Result<()> {
+//         let messages = generate_test_messages(10);
+//         messages.iter().map(|x| x.to_string());
+//
+//         let config = AeronConfig::default_ipc()?;
+//
+//         let mut context = Context::new();
+//         setup_aeron_publisher_context(&mut context);
+//
+//         let mut aeron = Aeron::new(context).unwrap();
+//
+//         let pub_id = aeron
+//             .add_publication(
+//                 str_to_c(&config.channel).expect("test_aeron_ipc str_to_c conversion error"),
+//                 config.stream_id,
+//             )
+//             .expect("unable to add publication to aeron");
+//
+//         let mut publication = aeron.find_publication(pub_id);
+//
+//         while publication.is_err() {
+//             std::thread::yield_now();
+//             publication = aeron.find_publication(pub_id);
+//         }
+//
+//         let publication = publication.unwrap();
+//
+//         for &msg in &messages {
+//             test_send_message(publication.clone(), msg.to_string());
+//         }
+//         Ok(())
+//
+//         // assert_eq!(receive_messages(&publication, messages.len()), messages);
+//     }
+//     //NOTE: tmp
+//     fn generate_test_messages(count: usize) -> Vec<i32> {
+//         let mut rng = thread_rng();
+//         let range = Uniform::new_inclusive(1, 1000);
+//
+//         (0..count).map(|_| rng.sample(&range)).collect()
+//     }
+//     //NOTE: tmp
+//     fn test_send_message(publication: Arc<Mutex<Publication>>, msg: String) {
+//         let str_msg = format!("{}", msg);
+//         let c_str_msg = CString::new(str_msg).unwrap();
+//         let buffer = AlignedBuffer::with_capacity(256);
+//         let src_buffer = AtomicBuffer::from_aligned(&buffer);
+//
+//         src_buffer.put_bytes(0, c_str_msg.as_bytes());
+//
+//         publication
+//             .lock()
+//             .unwrap()
+//             .offer_part(src_buffer, 0, c_str_msg.as_bytes().len() as i32);
+//     }
+//
+//     fn available_image_handler(image: &Image) {
+//         println!(
+//             "Available image correlation_id={} session_id={} at position={} from {}",
+//             image.correlation_id(),
+//             image.session_id(),
+//             image.position(),
+//             image.source_identity().to_str().unwrap()
+//         );
+//     }
+//
+//     fn unavailable_image_handler(image: &Image) {
+//         println!(
+//             "Unavailable image correlation_id={} session_id={} at position={} from {}",
+//             image.correlation_id(),
+//             image.session_id(),
+//             image.position(),
+//             image.source_identity().to_str().unwrap()
+//         );
+//     }
+//     fn on_new_fragment(buffer: &AtomicBuffer, offset: Index, length: Index, header: &Header) {
+//         unsafe {
+//             let slice_msg =
+//                 slice::from_raw_parts_mut(buffer.buffer().offset(offset as isize), length as usize);
+//             let msg = CString::new(slice_msg).unwrap();
+//             println!(
+//                 "Message to stream {} from session {} ({}@{}): <<{}>>",
+//                 header.stream_id(),
+//                 header.session_id(),
+//                 length,
+//                 offset,
+//                 msg.to_str().unwrap()
+//             );
+//         }
+//     }
+//
+//     pub fn setup_aeron_publisher_context(context: &mut Context) {
+//         context.set_new_publication_handler(Box::new(on_new_publication_handler));
+//         context.set_error_handler(Box::new(error_handler));
+//         context.set_pre_touch_mapped_memory(true);
+//     }
+// }

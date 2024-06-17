@@ -1,9 +1,11 @@
-use super::{
-    monitoring::AeronCounterManager,
+use crate::{
+    error::*,
+    management::monitoring::AeronCounterManager,
     publisher::{AeronConfig, AeronPublicationManager},
     test_config::{CounterTypeId, DEFAULT_KEY_BUFFER},
+    traits::NetworkActorLifecycle,
 };
-use crate::transport::{network::error::*, publisher_traits::NetworkActorLifecycle};
+// use crate::transport::{network::error::*, publisher_traits::NetworkActorLifecycle};
 use aeron_rs::{client_conductor::ClientConductor, utils::errors::AeronError};
 
 pub struct MediaDriverManager {
