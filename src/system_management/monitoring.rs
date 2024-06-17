@@ -1,7 +1,7 @@
 use crate::{
-    error::NetworkCommunicationError, management::analytics::AeronAnalytics,
-    management::state::AeronState, publisher::AeronConfig, test_config::*,
-    traits::NetworkActorLifecycle,
+    error::NetworkCommunicationError, publisher::AeronConfig,
+    system_management::analytics::AeronAnalytics, system_management::state::AeronState,
+    test_config::*, traits::NetworkActorLifecycle,
 };
 use aeron_rs::{
     aeron::Aeron,

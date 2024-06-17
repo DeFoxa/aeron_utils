@@ -1,7 +1,7 @@
 use crate::{
     error::*,
-    management::monitoring::AeronCounterManager,
     publisher::{AeronConfig, AeronPublicationManager},
+    system_management::monitoring::AeronCounterManager,
     test_config::{CounterTypeId, DEFAULT_KEY_BUFFER},
     traits::NetworkActorLifecycle,
 };
