@@ -31,7 +31,12 @@ use std::sync::{
 // isolated threads (possibly 4) running metrics calculations on a single isolated thread, analytic pushes to
 // grafana/prom on anoter thread, and pub/sub/counter increments and updates split across two. this
 // should limit critical sections
+//
 // TODO: Consider SoA refactor for cache optimized component metrics.
+//  - options include:
+//      - SoA plus Generational indexing
+//      - SlotMap
+//
 
 /*
 
@@ -39,6 +44,17 @@ use std::sync::{
  (atomic_counter field on Counter)
 
 */
+
+struct AeronCounterManager {
+    conductor: Arc<Mutex<ClientConductor>>,
+    counters: Vec<AeronCounterManager>,
+    monitors: Vec<AeronMonitor>,
+    analytics: Vec<AeronAnalytics>,
+    generations: Vec<GenerationEntry>,
+    free_indices: Vec<usize>,
+}
+
+struct AeronMonitorTwo {}
 
 pub type RegistrationId = i64;
 type Index = i32;
@@ -211,7 +227,7 @@ impl PublisherMetrics {
             message_size_distribution: (0..100).map(|_| AtomicU64::new(0)).collect(),
         }
     }
-    pub fn increment_published_message_index(&self) {
+    pub fn increment_published_index(&self) {
         self.published_index.fetch_add(1, Ordering::Relaxed);
     }
 
@@ -273,6 +289,11 @@ impl SubscriberMetrics {
             message_size_distribution: (0..100).map(|_| AtomicU64::new(0)).collect(),
         }
     }
+
+    pub fn increment_consumed_index(&self) {
+        self.consumed_index.fetch_add(1, Ordering::Relaxed);
+    }
+
     pub fn update_consumer_lag(&self, publisher_index: u64, subscriber_index: u64) {
         let lag = publisher_index.saturating_sub(subscriber_index);
         self.consumer_msg_lag.store(lag, Ordering::SeqCst);
