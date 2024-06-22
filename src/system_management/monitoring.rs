@@ -1,6 +1,6 @@
 use crate::{
     error::NetworkCommunicationError, publisher::AeronConfig,
-    system_management::analytics::AeronAnalytics, system_management::state::AeronState,
+    system_management::analytics::AeronAnalytics, system_management::client_state::AeronState,
     test_config::*, traits::NetworkActorLifecycle,
 };
 use aeron_rs::{
@@ -44,18 +44,18 @@ use std::sync::{
  (atomic_counter field on Counter)
 
 */
-
-struct AeronCounterManager {
-    conductor: Arc<Mutex<ClientConductor>>,
-    counters: Vec<AeronCounterManager>,
-    monitors: Vec<AeronMonitor>,
-    analytics: Vec<AeronAnalytics>,
-    generations: Vec<GenerationEntry>,
-    free_indices: Vec<usize>,
-}
-
-struct AeronMonitorTwo {}
-
+//
+// struct AeronCounterManager {
+//     conductor: Arc<Mutex<ClientConductor>>,
+//     counters: Vec<AeronCounterManager>,
+//     monitors: Vec<AeronMonitor>,
+//     analytics: Vec<AeronAnalytics>,
+//     generations: Vec<GenerationEntry>,
+//     free_indices: Vec<usize>,
+// }
+//
+// struct AeronMonitorTwo {}
+//
 pub type RegistrationId = i64;
 type Index = i32;
 
