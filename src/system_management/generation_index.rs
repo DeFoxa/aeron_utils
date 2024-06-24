@@ -181,6 +181,58 @@ impl<T> GenerationalIndexArray<T> {
         }
         None
     }
+
+    pub fn contains_key(&self, generation_index: GenerationalIndex) -> bool {
+        self.get(generation_index).is_some()
+    }
+
+    pub fn get(&self, generation_index: GenerationalIndex) -> Option<&T> {
+        if generation_index.index < self.0.len() {
+            self.0[generation_index.index].as_ref().and_then(|e| {
+                if e.generation == generation_index.generation {
+                    Some(&e.value)
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_mut(&mut self, generation_index: GenerationalIndex) -> Option<&mut T> {
+        if generation_index.index < self.0.len() {
+            self.0[generation_index.index].as_mut().and_then(|e| {
+                if e.generation == generation_index.generation {
+                    Some(&mut e.value)
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn retain<F: FnMut(GenerationalIndex, &mut T) -> bool>(&mut self, mut f: F) {
+        for i in 0..self.0.len() {
+            let entry = &mut self.0[i];
+            let keep = if let Some(entry) = entry.as_mut() {
+                f(
+                    GenerationalIndex {
+                        index: i,
+                        generation: entry.generation,
+                    },
+                    &mut entry.value,
+                )
+            } else {
+                false
+            };
+            if !keep {
+                *entry = None
+            }
+        }
+    }
 }
 
 pub enum DeallocationError {
