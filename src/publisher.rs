@@ -13,8 +13,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-// TEMP: will change to generic message types
-
+/* Below should be moved to implementation, not lib
 #[derive(Debug, Clone)]
 pub enum DeserializedMessage {
     NormalizedBook(NormalizedBook),
@@ -41,6 +40,7 @@ impl AeronMessage for DeserializedMessage {
         todo!();
     }
 }
+*/
 
 #[derive(Clone)]
 pub struct AeronConfig {
@@ -217,7 +217,6 @@ pub struct AeronPublisher<M: AeronMessage> {
     receiver: mpsc::Receiver<M>,
     components: Arc<Mutex<PublicationComponents>>,
     publisher: Arc<Mutex<Publication>>,
-    // active_channels: Arc<Mutex<AeronPublicationManager>>,
 }
 
 impl<M: AeronMessage> AeronPublisher<M> {
@@ -236,19 +235,12 @@ impl<M: AeronMessage> AeronPublisher<M> {
 
     pub async fn handle_message(&mut self, msg: M) -> Result<()> {
         tracing::debug!("Message received by aeron publisher");
-        //TODO add generic message handling for publication
-        // match msg {
-        //     AeronMessage::CapnpMessage(msg) => {
-        //         self.publisher
-        //             .lock()
-        //             .unwrap()
-        //             .publish(msg)
-        //             .map_err(|err| NetworkCommunicationError::AeronInstanceError(err));
-        //     }
-        //     AeronMessage::Other(data) => {
-        //         todo!();
-        //     }
-        // }
+        self.publisher
+            .lock()
+            .unwrap()
+            .publish(msg)
+            .map_err(|err| NetworkCommunicationError::AeronInstanceError(err));
+
         Ok(())
     }
 }
@@ -259,7 +251,7 @@ async fn run_aeron_actor<M: AeronMessage + 'static>(mut actor: AeronPublisher<M>
     tokio::spawn(async move {
         while let Some(msg) = actor.receiver.recv().await {
             match actor.handle_message(msg).await {
-                Ok(_) => tracing::debug!("Message sent to handle_message for publication"),
+                Ok(_) => tracing::info!("Message sent to handle_message for publication"),
                 Err(_) => tracing::error!("failed to handle_message"),
             }
         }
@@ -308,19 +300,16 @@ impl<M: AeronMessage + 'static> AeronPublisherHandler<M> {
     }
 }
 
-impl<DeserializedMessage: AeronMessage> Publisher<DeserializedMessage> for Publication {
+impl<M: AeronMessage> Publisher<M> for Publication {
     type Error = AeronError;
 
-    fn publish(&self, msg: DeserializedMessage) -> Result<(), Self::Error> {
-        let chunks = msg.to_bytes();
-        //TODO fix fro previoius chunking iteration
-        // for chunk in chunks {
-        //     let buffer = AlignedBuffer::with_capacity(1024);
-        //     let src_buffer = AtomicBuffer::from_aligned(&buffer);
-        //     src_buffer.put_bytes(0, &chunk);
-        //
-        //     self.offer(src_buffer);
-        // }
+    fn publish(&self, msg: M) -> Result<(), Self::Error> {
+        let msg_bytes = msg.to_bytes();
+        let buffer = AlignedBuffer::with_capacity(1024);
+        let src_buffer = AtomicBuffer::from_aligned(&buffer);
+        src_buffer.put_bytes(0, &msg_bytes);
+
+        self.offer(src_buffer);
 
         /*
         NOTE: Commented method below:
