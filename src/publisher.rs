@@ -1,7 +1,7 @@
 use crate::{
     error::NetworkCommunicationError,
     test_config::*,
-    traits::{Chunk, Publisher},
+    traits::{AeronMessage, Publisher},
     utils::*,
 };
 use aeron_rs::concurrent::atomic_buffer::{AlignedBuffer, AtomicBuffer};
@@ -20,13 +20,6 @@ pub enum DeserializedMessage {
     NormalizedBook(NormalizedBook),
     NormalizedTrade(NormalizedTrades),
 }
-
-impl Chunk for DeserializedMessage {
-    fn chunk_data(&self) -> Vec<Vec<u8>> {
-        todo!();
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct NormalizedTrades;
 
@@ -36,20 +29,18 @@ pub struct NormalizedBook;
 #[derive(Debug, Clone)]
 pub struct CapnpMessage;
 
-impl Chunk for CapnpMessage {
-    fn chunk_data(&self) -> Vec<Vec<u8>> {
+impl AeronMessage for CapnpMessage {
+    fn to_bytes(&self) -> Vec<u8> {
+        // tmp
         todo!();
     }
 }
 
-#[derive(Debug)]
-pub enum AeronMessage {
-    CapnpMessage(CapnpMessage),
-    //TODO: Add other transport/communication message types based on integrations
-    Other(DeserializedMessage),
+impl AeronMessage for DeserializedMessage {
+    fn to_bytes(&self) -> Vec<u8> {
+        todo!();
+    }
 }
-
-//
 
 #[derive(Clone)]
 pub struct AeronConfig {
@@ -222,16 +213,16 @@ impl AeronPublicationManager {
     }
 }
 
-pub struct AeronPublisher {
-    receiver: mpsc::Receiver<AeronMessage>,
+pub struct AeronPublisher<M: AeronMessage> {
+    receiver: mpsc::Receiver<M>,
     components: Arc<Mutex<PublicationComponents>>,
     publisher: Arc<Mutex<Publication>>,
     // active_channels: Arc<Mutex<AeronPublicationManager>>,
 }
 
-impl AeronPublisher {
+impl<M: AeronMessage> AeronPublisher<M> {
     fn new(
-        receiver: mpsc::Receiver<AeronMessage>,
+        receiver: mpsc::Receiver<M>,
         components: Arc<Mutex<PublicationComponents>>,
     ) -> Result<Self> {
         let lock = components.lock().unwrap().publication.clone();
@@ -243,27 +234,28 @@ impl AeronPublisher {
         })
     }
 
-    pub async fn handle_message(&mut self, msg: AeronMessage) -> Result<()> {
+    pub async fn handle_message(&mut self, msg: M) -> Result<()> {
         tracing::debug!("Message received by aeron publisher");
-        match msg {
-            AeronMessage::CapnpMessage(msg) => {
-                self.publisher
-                    .lock()
-                    .unwrap()
-                    .publish(msg)
-                    .map_err(|err| NetworkCommunicationError::AeronInstanceError(err));
-            }
-            AeronMessage::Other(data) => {
-                todo!();
-            }
-        }
+        //TODO add generic message handling for publication
+        // match msg {
+        //     AeronMessage::CapnpMessage(msg) => {
+        //         self.publisher
+        //             .lock()
+        //             .unwrap()
+        //             .publish(msg)
+        //             .map_err(|err| NetworkCommunicationError::AeronInstanceError(err));
+        //     }
+        //     AeronMessage::Other(data) => {
+        //         todo!();
+        //     }
+        // }
         Ok(())
     }
 }
 
 unsafe impl Send for PublicationComponents {}
 
-async fn run_aeron_actor(mut actor: AeronPublisher) -> Result<()> {
+async fn run_aeron_actor<M: AeronMessage + 'static>(mut actor: AeronPublisher<M>) -> Result<()> {
     tokio::spawn(async move {
         while let Some(msg) = actor.receiver.recv().await {
             match actor.handle_message(msg).await {
@@ -275,13 +267,14 @@ async fn run_aeron_actor(mut actor: AeronPublisher) -> Result<()> {
     .await;
     Ok(())
 }
-pub struct AeronPublisherHandler {
-    pub sender: mpsc::Sender<AeronMessage>,
+
+pub struct AeronPublisherHandler<M: AeronMessage> {
+    pub sender: mpsc::Sender<M>,
 }
 
-impl AeronPublisherHandler {
-    pub fn new() -> Result<(mpsc::Sender<AeronMessage>, JoinHandle<()>)> {
-        let (sender, receiver) = mpsc::channel::<AeronMessage>(512);
+impl<M: AeronMessage + 'static> AeronPublisherHandler<M> {
+    pub fn new() -> Result<(mpsc::Sender<M>, JoinHandle<()>)> {
+        let (sender, receiver) = mpsc::channel::<M>(512);
 
         let config = AeronConfig::default_udp()?;
         let components = Arc::new(Mutex::new(
@@ -315,18 +308,19 @@ impl AeronPublisherHandler {
     }
 }
 
-impl<DeserializedMessage: Chunk> Publisher<DeserializedMessage> for Publication {
+impl<DeserializedMessage: AeronMessage> Publisher<DeserializedMessage> for Publication {
     type Error = AeronError;
 
     fn publish(&self, msg: DeserializedMessage) -> Result<(), Self::Error> {
-        let chunks = msg.chunk_data();
-        for chunk in chunks {
-            let buffer = AlignedBuffer::with_capacity(1024);
-            let src_buffer = AtomicBuffer::from_aligned(&buffer);
-            src_buffer.put_bytes(0, &chunk);
-
-            self.offer(src_buffer);
-        }
+        let chunks = msg.to_bytes();
+        //TODO fix fro previoius chunking iteration
+        // for chunk in chunks {
+        //     let buffer = AlignedBuffer::with_capacity(1024);
+        //     let src_buffer = AtomicBuffer::from_aligned(&buffer);
+        //     src_buffer.put_bytes(0, &chunk);
+        //
+        //     self.offer(src_buffer);
+        // }
 
         /*
         NOTE: Commented method below:

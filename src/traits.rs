@@ -1,3 +1,6 @@
+use serde::Serialize;
+use std::fmt::Debug;
+
 pub trait NetworkActorLifecycle {
     type Config;
     type Error;
@@ -15,8 +18,6 @@ pub trait Publisher<Message> {
     fn publish(&self, msg: Message) -> Result<(), Self::Error>;
 }
 
-// TMP
-
-pub trait Chunk {
-    fn chunk_data(&self) -> Vec<Vec<u8>>;
+pub trait AeronMessage: Send + Sync + Debug + Clone {
+    fn to_bytes(&self) -> Vec<u8>;
 }
