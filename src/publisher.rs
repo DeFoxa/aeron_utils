@@ -4,42 +4,26 @@ use crate::{
     traits::{AeronMessage, Publisher},
     utils::*,
 };
-use aeron_rs::concurrent::atomic_buffer::{AlignedBuffer, AtomicBuffer};
-use aeron_rs::context::Context;
-use aeron_rs::utils::errors::AeronError;
-use aeron_rs::{aeron::Aeron, publication::Publication};
+
+use aeron_rs::{
+    aeron::Aeron,
+    concurrent::atomic_buffer::{AlignedBuffer, AtomicBuffer},
+    context::Context,
+    publication::Publication,
+    utils::errors::AeronError,
+};
+
 use eyre::Result;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-/* Below should be moved to implementation, not lib
-#[derive(Debug, Clone)]
-pub enum DeserializedMessage {
-    NormalizedBook(NormalizedBook),
-    NormalizedTrade(NormalizedTrades),
-}
-#[derive(Debug, Clone)]
-pub struct NormalizedTrades;
+/*
 
-#[derive(Debug, Clone)]
-pub struct NormalizedBook;
-
-#[derive(Debug, Clone)]
-pub struct CapnpMessage;
-
-impl AeronMessage for CapnpMessage {
-    fn to_bytes(&self) -> Vec<u8> {
-        // tmp
-        todo!();
-    }
-}
-
-impl AeronMessage for DeserializedMessage {
-    fn to_bytes(&self) -> Vec<u8> {
-        todo!();
-    }
-}
+ TODO: lib redesign:
+        - rip out the async actor model/methods
+        - generalize and remove previous bin design's opinionated components from publisher
+        - review code and think through implications of above
 */
 
 #[derive(Clone)]
@@ -220,7 +204,7 @@ pub struct AeronPublisher<M: AeronMessage> {
 }
 
 impl<M: AeronMessage> AeronPublisher<M> {
-    fn new(
+    pub fn new(
         receiver: mpsc::Receiver<M>,
         components: Arc<Mutex<PublicationComponents>>,
     ) -> Result<Self> {
@@ -242,6 +226,10 @@ impl<M: AeronMessage> AeronPublisher<M> {
             .map_err(|err| NetworkCommunicationError::AeronInstanceError(err));
 
         Ok(())
+    }
+
+    pub fn publisher(&self) -> Arc<Mutex<Publication>> {
+        Arc::clone(&self.publisher)
     }
 }
 
