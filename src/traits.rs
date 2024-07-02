@@ -1,5 +1,7 @@
 use serde::Serialize;
 use std::fmt::Debug;
+use std::future::Future;
+use std::pin::Pin;
 
 pub trait NetworkActorLifecycle {
     type Config;
@@ -20,4 +22,23 @@ pub trait Publisher<Message> {
 
 pub trait AeronMessage: Send + Sync + Debug + Clone {
     fn to_bytes(&self) -> Vec<u8>;
+}
+
+pub trait AsyncPublisher {
+    fn publish(
+        &self,
+        data: &[u8],
+    ) -> Pin<Box<dyn Future<Output = Result<(), PublishError>> + Send>>;
+}
+
+pub trait AsyncSubscriber {
+    fn subscribe(&self) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, SubscribeError>> + Send>>;
+}
+
+pub trait SyncPublisher {
+    fn publish(&self, data: &[u8]) -> Result<(), PublishError>;
+}
+
+pub trait SyncSubscriber {
+    fn subscribe(&self) -> Result<Vec<u8>, SubscribeError>;
 }
