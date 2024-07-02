@@ -23,6 +23,8 @@ pub trait Publisher<Message> {
 pub trait AeronMessage: Send + Sync + Debug + Clone {
     fn to_bytes(&self) -> Vec<u8>;
 }
+// TODO: new publisher iteration for lib requires async/synch impls for generaized use, although
+// wil deterimine if synch is necessary later
 
 pub trait AsyncPublisher {
     fn publish(
