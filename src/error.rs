@@ -8,32 +8,38 @@ pub enum NetworkCommunicationError {
     #[error("AeronError: {0}")]
     AeronInstanceError(#[from] AeronError),
     #[error("AeronPubliserError: {0}")]
-    AeronPublisherError(#[from] AeronPublisherError),
-    // IPCError(IPCError),
-    // TcpError(TcpError),
+    AeronPublisherError(#[from] PublisherError),
     #[error("Mutex poisoned: {0}")]
     PoisonError(#[from] PoisonError<MutexGuard<'static, Publication>>),
 }
 
-#[derive(Debug)]
-pub enum IPCError {
-    TODOIpcError,
-}
-
-#[derive(Debug)]
-pub enum TcpError {
-    TODOTCPErrors,
-}
-
-#[derive(Error, Debug)]
-pub enum AeronPublisherError {
+#[derive(Error, Debug, Clone)]
+pub enum PublisherError {
     TODOAeronPublisherError,
 }
 
-impl fmt::Display for AeronPublisherError {
+impl fmt::Display for PublisherError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AeronPublisherError::TODOAeronPublisherError => {
+            PublisherError::TODOAeronPublisherError => {
+                todo!();
+            }
+            _ => {
+                todo!();
+            }
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum SubscriberError {
+    TODOAeronSubscriberError,
+}
+
+impl fmt::Display for SubscriberError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SubscriberError::TODOAeronSubscriberError => {
                 todo!();
             }
             _ => {
