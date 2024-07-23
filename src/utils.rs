@@ -14,7 +14,7 @@ const INTER_SERVICE_TIMEOUT_NS: Moment = 5 * 1000 * 1000 * 1000;
 const INTER_SERVICE_TIMEOUT_MS: Moment = INTER_SERVICE_TIMEOUT_NS / 1_000_000;
 const PRE_TOUCH_MAPPED_MEMORY: bool = false;
 
-pub fn new_local_client_conductor(
+pub fn generate_local_conductor(
 ) -> Result<() /* NOTE: PlaceHolder, will return ClientConductor */, AeronError> {
     todo!();
     Ok(())
