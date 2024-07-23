@@ -36,8 +36,9 @@ pub struct AeronConfig {
     context: Option<Context>,
 }
 //NOTE: default methods assume single stream, on single channel.
-//TODO: Write aeron multi-stream method logic on second iteration of publisher. Current version
-// only includes single Publication instance, i.e. single stream_id.
+//TODO: Write aeron multi-stream method logic on second iteration of publisher.
+//
+
 impl AeronConfig {
     pub fn default_udp() -> Result<Self> {
         //NOTE: Default -> Single stream handling
@@ -260,7 +261,7 @@ impl<M: AeronMessage + 'static> AeronPublisherHandler<M> {
         let components = Arc::new(Mutex::new(
             PublicationComponents::register_with_media_driver(config)?,
         ));
-        let /* mut */ manager = Arc::new(Mutex::new(AeronPublicationManager::new()));
+        let manager = Arc::new(Mutex::new(AeronPublicationManager::new()));
 
         {
             let lock = components.lock().unwrap();
@@ -288,12 +289,12 @@ impl<M: AeronMessage + 'static> AeronPublisherHandler<M> {
     }
 }
 
-impl<M: AeronMessage> Publisher<M> for Publication {
+impl<M: AeronMessage> Publisher<M, DEFAULT_ALIGNED_BUFFER_SIZE> for Publication {
     type Error = AeronError;
 
     fn publish(&self, msg: M) -> Result<(), Self::Error> {
         let msg_bytes = msg.to_bytes();
-        let buffer = AlignedBuffer::with_capacity(1024);
+        let buffer = AlignedBuffer::with_capacity(DEFAULT_ALIGNED_BUFFER_SIZE);
         let src_buffer = AtomicBuffer::from_aligned(&buffer);
         src_buffer.put_bytes(0, &msg_bytes);
 
@@ -315,6 +316,16 @@ impl<M: AeronMessage> Publisher<M> for Publication {
         */
 
         Ok(())
+    }
+    fn offer(&self, msg: M) -> std::prelude::v1::Result<(), Self::Error> {
+        todo!();
+    }
+
+    fn offer_part(&self, msg: M) -> std::prelude::v1::Result<(), Self::Error> {
+        todo!();
+    }
+    fn try_claim_and_commit(&self, msg: M) -> std::prelude::v1::Result<(), Self::Error> {
+        todo!();
     }
 }
 
