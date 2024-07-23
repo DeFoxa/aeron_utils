@@ -1,8 +1,8 @@
 use crate::{
+    config::{CounterTypeId, DEFAULT_KEY_BUFFER},
     error::*,
     publisher::{AeronConfig, AeronPublicationManager},
     system_management::monitoring::AeronCounterManager,
-    test_config::{CounterTypeId, DEFAULT_KEY_BUFFER},
     traits::NetworkActorLifecycle,
 };
 // use crate::transport::{network::error::*, publisher_traits::NetworkActorLifecycle};

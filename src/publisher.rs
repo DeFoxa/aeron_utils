@@ -1,6 +1,6 @@
 use crate::{
+    config::*,
     error::NetworkCommunicationError,
-    test_config::*,
     traits::{AeronMessage, Publisher},
     utils::*,
 };
