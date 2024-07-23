@@ -13,11 +13,11 @@ pub trait NetworkActorLifecycle {
     fn restart(&mut self) -> Result<(), Self::Error>;
 }
 
-pub trait Publisher<Message> {
+pub trait Publisher<M> {
     // type Message;
     type Error;
 
-    fn publish(&self, msg: Message) -> Result<(), Self::Error>;
+    fn publish(&self, msg: M) -> Result<(), Self::Error>;
 }
 
 pub trait AeronMessage: Send + Sync + Debug + Clone {
