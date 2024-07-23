@@ -11,6 +11,7 @@ pub const DEFAULT_LINGER_TIMEOUT_MS: &str = "0";
 pub const DEFAULT_FRAGMENT_COUNT_LIMIT: &str = "10";
 pub const DEFAULT_RANDOM_MESSAGE_LENGTH: bool = false;
 pub const DEFAULT_PUBLICATION_RATE_PROGRESS: bool = false;
+pub const DEFAULT_ALIGNED_BUFFER_SIZE: i32 = 1024;
 
 //Monitoring
 
