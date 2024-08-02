@@ -4,7 +4,7 @@ Utility library for aeron-rs crate
 
 ## About Aeron
 - Efficient reliable UDP unicast, UDP multicast, and IPC message transport.
-- Java, C, C== clients avilable in aeron repo
+- Java, C, C++ clients avilable in aeron repo
 - github: https://github.com/real-logic/aeron
 
 ## About aeron-rs
