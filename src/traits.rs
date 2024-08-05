@@ -1,4 +1,5 @@
 use crate::error::{PublisherError, SubscriberError};
+use eyre::Result;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::future::Future;
