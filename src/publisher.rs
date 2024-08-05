@@ -317,14 +317,27 @@ impl<M: AeronMessage> Publisher<M, DEFAULT_ALIGNED_BUFFER_SIZE> for Publication 
 
         Ok(())
     }
-    fn offer(&self, msg: M) -> std::prelude::v1::Result<(), Self::Error> {
-        todo!();
+
+    fn offer(&self, msg: M) -> Result<(), Self::Error> {
+        let msg_bytes = msg.to_bytes();
+        let buffer = AlignedBuffer::with_capacity(DEFAULT_ALIGNED_BUFFER_SIZE);
+        let src_buffer = AtomicBuffer::from_aligned(&buffer);
+        src_buffer.put_bytes(0, &msg_bytes);
+
+        self.offer(src_buffer);
+        Ok(())
     }
 
-    fn offer_part(&self, msg: M) -> std::prelude::v1::Result<(), Self::Error> {
-        todo!();
+    fn offer_part(&self, msg: M) -> Result<(), Self::Error> {
+        let msg_bytes = msg.to_bytes();
+        let buffer = AlignedBuffer::with_capacity(DEFAULT_ALIGNED_BUFFER_SIZE);
+        let src_buffer = AtomicBuffer::from_aligned(&buffer);
+        src_buffer.put_bytes(0, &msg_bytes);
+
+        self.offer_part(src_buffer, 0, msg_bytes.len() as i32);
+        Ok(())
     }
-    fn try_claim_and_commit(&self, msg: M) -> std::prelude::v1::Result<(), Self::Error> {
+    fn try_claim_and_commit(&self, msg: M) -> Result<(), Self::Error> {
         todo!();
     }
 }
