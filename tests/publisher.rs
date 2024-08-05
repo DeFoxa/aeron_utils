@@ -64,6 +64,10 @@ fn config_to_publish() {
 
     let components = PublicationComponents::register_with_media_driver(config).unwrap();
 
-    let mut publisher = AeronPublisher::new(receiver, Arc::new(Mutex::new(components))).unwrap();
-    // let test = publisher.publisher().lock().unwrap(); //.publish(msg);
+    let publisher = AeronPublisher::new(receiver, Arc::new(Mutex::new(components))).unwrap();
+    let test = publisher
+        .publisher()
+        .lock()
+        .expect("poisoned mutex")
+        .offer(msg);
 }
